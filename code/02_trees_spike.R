@@ -17,6 +17,7 @@ n_boot <- 50   # number of bootstrap replicates (raise to 100 if time allows)
 if (basename(getwd()) == "code") setwd("..")
 dir.create("figures", showWarnings = FALSE, recursive = TRUE)
 dir.create("results", showWarnings = FALSE, recursive = TRUE)
+source("code/helpers.R")   # node_support() and plot_tree_support()
 
 # Helper: show a base-R plot on screen AND save it as a PNG in figures/
 plot_and_save <- function(file, plot_fun, w = 8, h = 6) {
@@ -47,9 +48,8 @@ col_genus <- c(Alphacoronavirus = "darkgreen", Betacoronavirus = "firebrick",
 tip_col <- col_genus[meta$genus[match(nj_root$tip.label, meta$short_name)]]
 
 plot_and_save("fig3_nj_tree.png", function() {
-  plotBS(nj_root, bs_nj, p = 50, type = "phylogram", tip.color = tip_col,
-         main = paste0("Neighbour-joining tree, N gene (", n_boot, " bootstraps, JC69)"))
-  add.scale.bar()
+  plot_tree_support(nj_root, bs_nj, tip_col = tip_col, legend_cols = col_genus,
+                    main = paste0("Neighbour-joining tree, N gene (", n_boot, " bootstraps, JC69)"))
 })
 
 # UPGMA assumes a constant rate - shown for comparison only
@@ -80,9 +80,8 @@ ml_root  <- root(fit$tree, outgroup = outgroup, resolve.root = TRUE)
 tip_col2 <- col_genus[meta$genus[match(ml_root$tip.label, meta$short_name)]]
 
 plot_and_save("fig4_ml_tree.png", function() {
-  plotBS(ml_root, bs_ml, p = 50, type = "phylogram", tip.color = tip_col2,
-         main = paste0("Maximum-likelihood tree, N gene (", best_model, ", ", n_boot, " bootstraps)"))
-  add.scale.bar()
+  plot_tree_support(ml_root, bs_ml, tip_col = tip_col2, legend_cols = col_genus,
+                    main = paste0("Maximum-likelihood tree, N gene (", best_model, ", ", n_boot, " bootstraps)"))
 })
 write.tree(ml_root, "results/ml_tree.nwk")
 
@@ -129,9 +128,8 @@ bs_s <- bootstrap.phyDat(phy_s, function(x) NJ(dist.ml(x, model = "JC69")), bs =
 nj_s <- root(nj_s, outgroup = "HCoV-OC43", resolve.root = TRUE)  # embecovirus outgroup
 
 plot_and_save("fig5_spike_tree.png", function() {
-  plotBS(nj_s, bs_s, p = 50, type = "phylogram",
-         main = paste0("Spike gene NJ tree (Betacoronavirus, ", n_boot, " bootstraps)"))
-  add.scale.bar()
+  plot_tree_support(nj_s, bs_s,
+                    main = paste0("Spike gene NJ tree (Betacoronavirus, ", n_boot, " bootstraps)"))
 })
 
 # ---- 4. Save objects for the report (coronavirus_report.Rmd) ----------------
