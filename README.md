@@ -219,4 +219,3 @@ Wright, E.S. (2016) 'Using DECIPHER v2.0 to analyze big biological sequence data
 Zhou, P. *et al.* (2020) 'A pneumonia outbreak associated with a new coronavirus of probable bat origin', *Nature*, 579, pp. 270–273.
 
 **Datasets.** NCBI Nucleotide database (https://www.ncbi.nlm.nih.gov/nuccore/), accessed 14 November 2026. The 15 genome sequences are cited by accession in Table 1.
-
