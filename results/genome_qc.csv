@@ -1,0 +1,16 @@
+accession,short_name,full_name,genus,lineage,host,length,GC,N_bases
+NC_045512.2,SARS-CoV-2,Severe acute respiratory syndrome coronavirus 2 (Wuhan-Hu-1),Betacoronavirus,Sarbecovirus,Human,29903,37.97277865097147,0
+MN996532.2,RaTG13,Bat coronavirus RaTG13,Betacoronavirus,Sarbecovirus,Bat,29855,38.03048065650645,0
+MG772933.1,SL-ZC45,Bat SARS-like coronavirus ZC45,Betacoronavirus,Sarbecovirus,Bat,29802,38.90342930004698,0
+MG772934.1,SL-ZXC21,Bat SARS-like coronavirus ZXC21,Betacoronavirus,Sarbecovirus,Bat,29732,38.82348984259384,0
+NC_004718.3,SARS-CoV,SARS coronavirus Tor2,Betacoronavirus,Sarbecovirus,Human,29751,40.7616550704178,0
+NC_019843.3,MERS-CoV,Middle East respiratory syndrome coronavirus,Betacoronavirus,Merbecovirus,Human,30119,41.23642883229855,0
+NC_009019.1,BatCoV-HKU4,Tylonycteris bat coronavirus HKU4,Betacoronavirus,Merbecovirus,Bat,30286,37.81615267780493,0
+NC_009020.1,BatCoV-HKU5,Pipistrellus bat coronavirus HKU5,Betacoronavirus,Merbecovirus,Bat,30482,43.18614264155896,0
+NC_006213.1,HCoV-OC43,Human coronavirus OC43,Betacoronavirus,Embecovirus,Human,30741,36.788002992745845,0
+NC_006577.2,HCoV-HKU1,Human coronavirus HKU1,Betacoronavirus,Embecovirus,Human,29926,32.059079061685495,0
+NC_001846.1,MHV,Murine hepatitis virus,Betacoronavirus,Embecovirus,Mouse,31357,41.7801447842587,0
+NC_002645.1,HCoV-229E,Human coronavirus 229E,Alphacoronavirus,Duvinacovirus,Human,27317,38.26188820148626,0
+NC_005831.2,HCoV-NL63,Human coronavirus NL63,Alphacoronavirus,Setracovirus,Human,27553,34.46085725692302,0
+NC_003436.1,PEDV,Porcine epidemic diarrhoea virus,Alphacoronavirus,Pedacovirus,Pig,28033,42.01833553312168,0
+NC_001451.1,IBV,Avian infectious bronchitis virus,Gammacoronavirus,Igacovirus,Chicken,27608,37.93103448275862,0
