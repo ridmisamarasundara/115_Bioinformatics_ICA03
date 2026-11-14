@@ -1,0 +1,16 @@
+accession,short_name,full_name,genus,lineage,host
+NC_045512.2,SARS-CoV-2,Severe acute respiratory syndrome coronavirus 2 (Wuhan-Hu-1),Betacoronavirus,Sarbecovirus,Human
+MN996532.2,RaTG13,Bat coronavirus RaTG13,Betacoronavirus,Sarbecovirus,Bat
+MG772933.1,SL-ZC45,Bat SARS-like coronavirus ZC45,Betacoronavirus,Sarbecovirus,Bat
+MG772934.1,SL-ZXC21,Bat SARS-like coronavirus ZXC21,Betacoronavirus,Sarbecovirus,Bat
+NC_004718.3,SARS-CoV,SARS coronavirus Tor2,Betacoronavirus,Sarbecovirus,Human
+NC_019843.3,MERS-CoV,Middle East respiratory syndrome coronavirus,Betacoronavirus,Merbecovirus,Human
+NC_009019.1,BatCoV-HKU4,Tylonycteris bat coronavirus HKU4,Betacoronavirus,Merbecovirus,Bat
+NC_009020.1,BatCoV-HKU5,Pipistrellus bat coronavirus HKU5,Betacoronavirus,Merbecovirus,Bat
+NC_006213.1,HCoV-OC43,Human coronavirus OC43,Betacoronavirus,Embecovirus,Human
+NC_006577.2,HCoV-HKU1,Human coronavirus HKU1,Betacoronavirus,Embecovirus,Human
+NC_001846.1,MHV,Murine hepatitis virus,Betacoronavirus,Embecovirus,Mouse
+NC_002645.1,HCoV-229E,Human coronavirus 229E,Alphacoronavirus,Duvinacovirus,Human
+NC_005831.2,HCoV-NL63,Human coronavirus NL63,Alphacoronavirus,Setracovirus,Human
+NC_003436.1,PEDV,Porcine epidemic diarrhoea virus,Alphacoronavirus,Pedacovirus,Pig
+NC_001451.1,IBV,Avian infectious bronchitis virus,Gammacoronavirus,Igacovirus,Chicken
