@@ -12,6 +12,7 @@ library(ape)
 library(phangorn)
 
 set.seed(123)
+n_boot <- 50   # number of bootstrap replicates (raise to 100 if time allows)
 
 if (basename(getwd()) == "code") setwd("..")
 dir.create("figures", showWarnings = FALSE, recursive = TRUE)
@@ -39,7 +40,7 @@ upgma_tree <- upgma(dm)
 outgroup <- "IBV"  # Gammacoronavirus = outgroup for alpha + beta
 nj_root  <- root(nj_tree, outgroup = outgroup, resolve.root = TRUE)
 
-bs_nj <- bootstrap.phyDat(phy, function(x) NJ(dist.ml(x, model = "JC69")), bs = 100)
+bs_nj <- bootstrap.phyDat(phy, function(x) NJ(dist.ml(x, model = "JC69")), bs = n_boot)
 
 col_genus <- c(Alphacoronavirus = "darkgreen", Betacoronavirus = "firebrick",
                Gammacoronavirus = "steelblue")
@@ -47,14 +48,15 @@ tip_col <- col_genus[meta$genus[match(nj_root$tip.label, meta$short_name)]]
 
 plot_and_save("fig3_nj_tree.png", function() {
   plotBS(nj_root, bs_nj, p = 50, type = "phylogram", tip.color = tip_col,
-         main = "Neighbour-joining tree, N gene (100 bootstraps, JC69)")
+         main = paste0("Neighbour-joining tree, N gene (", n_boot, " bootstraps, JC69)"))
   add.scale.bar()
 })
 
 # UPGMA assumes a constant rate - shown for comparison only
 plot(upgma_tree, main = "UPGMA tree (assumes a constant rate)")
-
-
+png("figures/fig6_upgma_tree.png", width = 8, height = 6, units = "in", res = 300)
+plot(upgma_tree, main = "UPGMA tree (assumes a constant rate)")
+dev.off()
 
 # ---- 2. Maximum-likelihood tree ---------------------------------------------
 # Compare substitution models using BIC (restricted set for speed)
@@ -71,15 +73,15 @@ fit  <- optim.pml(fit0, model = base_model, optGamma = TRUE, optInv = TRUE,
                   rearrangement = "NNI", control = pml.control(trace = 0))
 print(fit$logLik)
 
-# Bootstrap (reduce bs to 50 if too slow)
-bs_ml    <- bootstrap.pml(fit, bs = 100, optNni = TRUE, multicore = FALSE,
+# Bootstrap (number of replicates set by n_boot at the top)
+bs_ml    <- bootstrap.pml(fit, bs = n_boot, optNni = TRUE, multicore = FALSE,
                           control = pml.control(trace = 0))
 ml_root  <- root(fit$tree, outgroup = outgroup, resolve.root = TRUE)
 tip_col2 <- col_genus[meta$genus[match(ml_root$tip.label, meta$short_name)]]
 
 plot_and_save("fig4_ml_tree.png", function() {
   plotBS(ml_root, bs_ml, p = 50, type = "phylogram", tip.color = tip_col2,
-         main = paste0("Maximum-likelihood tree, N gene (", best_model, ", 100 bootstraps)"))
+         main = paste0("Maximum-likelihood tree, N gene (", best_model, ", ", n_boot, " bootstraps)"))
   add.scale.bar()
 })
 write.tree(ml_root, "results/ml_tree.nwk")
@@ -123,15 +125,23 @@ mat_s <- as.matrix(as(aln_s, "DNAStringSet"))
 phy_s <- phyDat(mat_s[, colMeans(mat_s == "-") < 0.5], type = "DNA")
 
 nj_s <- NJ(dist.ml(phy_s, model = "JC69"))
-bs_s <- bootstrap.phyDat(phy_s, function(x) NJ(dist.ml(x, model = "JC69")), bs = 100)
+bs_s <- bootstrap.phyDat(phy_s, function(x) NJ(dist.ml(x, model = "JC69")), bs = n_boot)
 nj_s <- root(nj_s, outgroup = "HCoV-OC43", resolve.root = TRUE)  # embecovirus outgroup
 
 plot_and_save("fig5_spike_tree.png", function() {
   plotBS(nj_s, bs_s, p = 50, type = "phylogram",
-         main = "Spike gene NJ tree (Betacoronavirus, 100 bootstraps)")
+         main = paste0("Spike gene NJ tree (Betacoronavirus, ", n_boot, " bootstraps)"))
   add.scale.bar()
 })
 
-# ---- 4. Session information -------------------------------------------------
+# ---- 4. Save objects for the report (coronavirus_report.Rmd) ----------------
+saveRDS(list(nj_root = nj_root, bs_nj = bs_nj, upgma_tree = upgma_tree,
+             mt = mt, best_model = best_model, ml_root = ml_root, bs_ml = bs_ml,
+             logLik = fit$logLik, rf = RF.dist(unroot(nj_root), unroot(ml_root)),
+             nj_s = nj_s, bs_s = bs_s, spike_width = width(spike),
+             spike_missing = missing, n_boot = n_boot),
+        "results/part2_objects.rds")
+
+# ---- 5. Session information -------------------------------------------------
 writeLines(capture.output(sessionInfo()), "results/sessionInfo.txt")
 sessionInfo()
