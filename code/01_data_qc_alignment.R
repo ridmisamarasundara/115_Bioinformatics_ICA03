@@ -1,8 +1,14 @@
- 
- 
- 
-# install.packages
- 
+# =============================================================================
+# PART 1 (Day 1): Data import, QC/EDA, alignment, distance matrix and heatmap
+# Output: results/part1_objects.rds  (used by 02_trees_spike.R)
+# Run from the repository root (or from code/ - the script handles both).
+# =============================================================================
+
+# ---- 0. Setup ---------------------------------------------------------------
+# Install once (uncomment if needed):
+# install.packages(c("tidyverse", "rentrez", "ape", "phangorn", "pheatmap"))
+# if (!require("BiocManager")) install.packages("BiocManager")
+# BiocManager::install(c("Biostrings", "msa", "DECIPHER"))
 
 library(tidyverse)
 library(rentrez)
@@ -13,13 +19,15 @@ library(phangorn)
 library(pheatmap)
 
 set.seed(123)
- 
+
+# Always work from the repository root, even if the script is run from code/
 if (basename(getwd()) == "code") setwd("..")
 
 dir.create("data/fasta",   showWarnings = FALSE, recursive = TRUE)
 dir.create("data/genbank", showWarnings = FALSE, recursive = TRUE)
 dir.create("figures",      showWarnings = FALSE, recursive = TRUE)
 dir.create("results",      showWarnings = FALSE, recursive = TRUE)
+source("code/helpers.R")   # plot_genome_qc()
 
 # ---- 1. Data import ---------------------------------------------------------
 meta <- read_csv("data/virus_metadata.csv")
@@ -47,7 +55,7 @@ genomes <- do.call(c, lapply(meta$accession, function(a) readDNAStringSet(fetch_
 names(genomes) <- meta$short_name
 print(genomes)
 
-# Download the GenBank records now  
+# Download the GenBank records now too (needed on Day 2 for the spike gene)
 invisible(lapply(meta$accession, fetch_gb))
 
 # ---- 2. Quality control and exploratory analysis ----------------------------
@@ -60,18 +68,15 @@ print(qc %>% select(short_name, genus, host, length, GC, N_bases))
 
 stopifnot(all(qc$N_bases < 100))  # sanity check: few ambiguous bases
 
-p_qc <- ggplot(qc, aes(length, GC, colour = genus, shape = host)) +
-  geom_point(size = 3) +
-  geom_text(aes(label = short_name), vjust = -0.8, size = 3,
-            check_overlap = TRUE, show.legend = FALSE) +
-  labs(x = "Genome length (nt)", y = "GC content (%)",
-       title = "Genome length and GC content of 15 coronaviruses") +
-  theme_minimal()
+p_qc <- plot_genome_qc(qc)   # defined in code/helpers.R
 print(p_qc)
 ggsave("figures/fig1_genome_qc.png", p_qc, width = 8, height = 5, dpi = 300)
 
 # ---- 3. Multiple sequence alignment (nucleocapsid gene) ---------------------
- 
+# Aligning whole 30 kb genomes from different genera is very slow and unreliable
+# (divergent regions, rearrangements). Instead the nucleocapsid (N) gene, present
+# in every coronavirus, is extracted from the GenBank annotation and aligned
+# codon-aware (translated, aligned, back-translated) with DECIPHER.
 get_cds <- function(acc, genome, pattern) {
   ln <- readLines(fetch_gb(acc))
   starts <- grep("^     CDS ", ln)
@@ -123,15 +128,15 @@ write.csv(round(dmat, 4), "results/p_distance_matrix.csv")
 annot <- data.frame(Genus = meta$genus, row.names = meta$short_name)
 annot <- annot[rownames(dmat), , drop = FALSE]  # same order as the matrix
 
-# On screen
-pheatmap(dmat, annotation_row = annot,
-         main = "Pairwise p-distance of nucleocapsid (N) gene")
-# Saved directly to file  
+# Saved directly to file first (most reliable way to save a pheatmap)
 pheatmap(dmat, annotation_row = annot,
          main = "Pairwise p-distance of nucleocapsid (N) gene",
          filename = "figures/fig2_distance_heatmap.png", width = 9, height = 7)
+# Then draw on screen LAST, so it stays visible in the Plots pane
+pheatmap(dmat, annotation_row = annot,
+         main = "Pairwise p-distance of nucleocapsid (N) gene")
 
-# ---- 5. Save objects   ---------------------------------------------
+# ---- 5. Save objects for Part 2 ---------------------------------------------
 saveRDS(list(meta = meta, genomes = genomes, phy = phy),
         "results/part1_objects.rds")
 cat("Part 1 finished. Objects saved to results/part1_objects.rds\n")
