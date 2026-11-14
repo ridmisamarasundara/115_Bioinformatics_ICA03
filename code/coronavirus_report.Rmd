@@ -1,0 +1,321 @@
+---
+title: "Evolutionary relationships among coronaviruses: where does SARS-CoV-2 fit?"
+author: "2021/ICT/115"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.align = "center", out.width = "90%")
+
+library(tidyverse)
+library(Biostrings)
+library(ape)
+library(phangorn)
+library(knitr)
+
+# Absolute path to the repository root (works whether knitted from code/ or the root)
+root <- normalizePath(if (basename(getwd()) == "code") ".." else ".")
+p <- function(...) file.path(root, ...)
+dir.create(p("figures"), showWarnings = FALSE)
+dir.create(p("results"), showWarnings = FALSE)
+
+source(p("code", "helpers.R"))   # plot_genome_qc(), node_support(), plot_tree_support()
+```
+
+```{r pipeline, include=FALSE, results="hide", fig.show="hide"}
+# This report reads the results saved by the two analysis scripts.
+# If they are missing, the scripts are run first (this can take a long time).
+run_script <- function(f) {
+  owd <- getwd(); on.exit(setwd(owd))
+  setwd(root)
+  suppressMessages(suppressWarnings(source(p("code", f), echo = FALSE)))
+}
+if (!file.exists(p("results", "part1_objects.rds"))) run_script("01_data_qc_alignment.R")
+if (!file.exists(p("results", "part2_objects.rds"))) run_script("02_trees_spike.R")
+```
+
+```{r calc, include=FALSE}
+# ---- Load saved results -----------------------------------------------------
+qc   <- read_csv(p("results", "genome_qc.csv"), show_col_types = FALSE)
+p1   <- readRDS(p("results", "part1_objects.rds"))   # meta, genomes, phy
+p2   <- readRDS(p("results", "part2_objects.rds"))   # trees, bootstraps, model test
+meta <- p1$meta
+phy  <- p1$phy
+
+n_virus  <- nrow(qc)
+n_sites  <- sum(attr(phy, "weight"))                 # alignment columns kept
+aln_cols <- unique(width(readDNAStringSet(p("results", "N_gene_alignment.fasta"))))
+n_boot   <- p2$n_boot
+
+# ---- Lineage groups used in the text ---------------------------------------
+sarb  <- c("SARS-CoV-2", "RaTG13", "SARS-CoV", "SL-ZC45", "SL-ZXC21")  # sarbecoviruses
+merb  <- c("MERS-CoV", "BatCoV-HKU4", "BatCoV-HKU5")                    # merbecoviruses
+embe  <- c("HCoV-OC43", "HCoV-HKU1", "MHV")                             # embecoviruses
+alph  <- c("HCoV-229E", "HCoV-NL63", "PEDV")                            # alphacoronaviruses
+betas <- c(sarb, merb, embe)
+
+# ---- Genome features --------------------------------------------------------
+rng <- function(x, d = 0) paste(format(round(min(x), d), big.mark = ","),
+                                format(round(max(x), d), big.mark = ","), sep = "–")
+len_beta  <- qc$length[qc$genus == "Betacoronavirus"]
+len_other <- qc$length[qc$genus != "Betacoronavirus"]
+gc_low  <- qc %>% slice_min(GC, n = 1)
+gc_high <- qc %>% slice_max(GC, n = 1)
+len_max <- qc %>% slice_max(length, n = 1)
+
+# ---- Distances --------------------------------------------------------------
+dmat    <- as.matrix(dist.hamming(phy))
+focal   <- "SARS-CoV-2"
+d_focal <- sort(dmat[focal, rownames(dmat) != focal])
+nearest <- names(d_focal)[1]
+d_ratg13 <- round(dmat[focal, "RaTG13"], 3)
+d_sars   <- round(dmat[focal, "SARS-CoV"], 3)
+d_mers   <- round(dmat[focal, "MERS-CoV"], 3)
+ratio_sars <- round(dmat[focal, "SARS-CoV"] / dmat[focal, "RaTG13"], 1)
+within_rng <- function(taxa) { m <- dmat[taxa, taxa]; round(range(m[upper.tri(m)]), 2) }
+between_rng <- function(a, b) round(range(dmat[a, b]), 2)
+r_sarb <- within_rng(sarb); r_merb <- within_rng(merb)
+r_embe <- within_rng(embe); r_alph <- within_rng(alph)
+r_betw <- round(range(c(dmat[sarb, c(merb, embe)], dmat[merb, embe])), 2)
+r_ab   <- between_rng(alph, betas)
+r_ibv  <- round(range(dmat["IBV", rownames(dmat) != "IBV"]), 2)
+dm_up <- dmat; dm_up[lower.tri(dm_up, diag = TRUE)] <- NA
+mx <- which(dm_up == max(dm_up, na.rm = TRUE), arr.ind = TRUE)[1, ]
+max_pair <- paste(rownames(dmat)[mx[1]], "and", colnames(dmat)[mx[2]])
+max_d <- round(max(dm_up, na.rm = TRUE), 2)
+
+# ---- Bootstrap support (computed with node_support() from helpers.R) ---------
+sup_nj <- node_support(p2$nj_root, p2$bs_nj)
+sup_ml <- node_support(p2$ml_root, p2$bs_ml)
+sup_sp <- node_support(p2$nj_s,    p2$bs_s)
+
+# Support of the clade made of exactly `taxa`; NA if the tree does not contain it
+cs <- function(tree, sup, taxa) {
+  tryCatch({
+    node <- ape::getMRCA(tree, taxa)
+    tips <- ape::extract.clade(tree, node)$tip.label
+    if (setequal(tips, taxa)) unname(sup[node - ape::Ntip(tree)]) else NA_real_
+  }, error = function(e) NA_real_)
+}
+pc <- function(x) ifelse(is.na(x), "not available", paste0(x, "%"))
+
+pair <- c("SARS-CoV-2", "RaTG13")
+sarb_bat <- c("SARS-CoV", "SL-ZC45", "SL-ZXC21")
+sl_pair  <- c("SL-ZC45", "SL-ZXC21")
+sars2_sl <- c("SARS-CoV-2", "RaTG13", "SL-ZC45", "SL-ZXC21")
+
+# ---- Colours and figure helper ---------------------------------------------
+col_genus <- c(Alphacoronavirus = "darkgreen", Betacoronavirus = "firebrick",
+               Gammacoronavirus = "steelblue")
+tipcol <- function(tree) col_genus[meta$genus[match(tree$tip.label, meta$short_name)]]
+
+# Draw a figure in the report and also save it to figures/ for the README
+save_png <- function(file, fun, w = 8, h = 6) {
+  fun()
+  png(p("figures", file), width = w, height = h, units = "in", res = 300)
+  fun()
+  invisible(dev.off())
+}
+```
+
+# Abstract
+
+Coronaviruses have caused three major human outbreaks since 2002, and tracing the origin of SARS-CoV-2 depends on knowing its relatives. I analysed `r n_virus` complete coronavirus genomes from NCBI in R, building neighbour-joining and maximum-likelihood trees from the codon-aligned nucleocapsid (N) gene (`r p2$best_model`, `r n_boot` bootstraps) and a spike-gene tree for betacoronaviruses. SARS-CoV-2 grouped with the bat virus RaTG13 in every tree (p-distance `r d_ratg13`; support `r pc(cs(p2$ml_root, sup_ml, pair))` in the ML tree), within a sarbecovirus clade, and apart from MERS-CoV and the common-cold coronaviruses. The N-gene NJ and ML trees differed only within the alphacoronaviruses (Robinson–Foulds distance `r p2$rf`), whereas the spike tree arranged SARS-CoV and the merbecoviruses differently. The results support a bat-virus origin of the lineage, but one gene and `r n_virus` viruses cannot show how it reached humans.
+
+# Introduction
+
+Coronaviruses (subfamily *Orthocoronavirinae*) are enveloped RNA viruses with genomes of roughly 27–32 kb that infect birds and mammals. They are classified into four genera: *Alpha-*, *Beta-*, *Gamma-* and *Deltacoronavirus*. Seven coronaviruses are known to infect humans. HCoV-229E and HCoV-NL63 (alphacoronaviruses) and HCoV-OC43 and HCoV-HKU1 (betacoronaviruses) usually cause mild respiratory illness, whereas SARS-CoV (2002), MERS-CoV (2012) and SARS-CoV-2 (2019) caused severe disease and large outbreaks. SARS-CoV, MERS-CoV and SARS-CoV-2 are thought to have bat-borne ancestors, reaching people directly or through intermediate animal hosts (Zhou *et al.*, 2020; Andersen *et al.*, 2020).
+
+When a new virus emerges, one of the first questions is which known viruses it is most closely related to. Phylogenetic analysis answers this by placing the virus on the coronavirus family tree. The answer helps to identify likely animal reservoirs, directs surveillance towards related animal viruses with spillover potential, and shows how much knowledge about close relatives is likely to transfer. For SARS-CoV-2, the bat virus RaTG13 shares about 96% of its genome sequence (Zhou *et al.*, 2020), but the wider relationships are best understood by comparing several viruses within one consistent analysis.
+
+**Aim.** To reconstruct the evolutionary relationships among `r n_virus` representative coronaviruses from three genera and to determine which of them are the closest relatives of SARS-CoV-2.
+
+**Hypotheses.**
+
+1. SARS-CoV-2 clusters with the bat virus RaTG13 and the other sarbecoviruses (SARS-CoV and bat SARS-like viruses), and not with MERS-CoV or the common-cold coronaviruses.
+2. Trees built from the conserved nucleocapsid gene and from the more variable spike gene agree on the major groupings, although differences may appear because coronaviruses recombine.
+
+# Data
+
+**Source.** Complete genome sequences from NCBI Nucleotide (RefSeq and GenBank), downloaded in R with the `rentrez` package on 14 November 2026. Accessions, taxonomy and host are in `data/virus_metadata.csv`; the sequences are cached in `data/fasta/` and the GenBank annotation files in `data/genbank/`.
+
+**Description.** `r n_virus` viruses from three genera, chosen to cover the main lineages around SARS-CoV-2 and to include an outgroup (Table 1).
+
+```{r data_table}
+qc %>%
+  transmute(Virus = short_name, Accession = accession, Genus = genus, Host = host,
+            `Length (nt)` = format(length, big.mark = ","), `GC (%)` = round(GC, 1)) %>%
+  kable(caption = "Table 1. Coronaviruses used in this study.")
+```
+
+**Variables.** Accession, short name, genus, lineage and host (from the metadata table), plus genome length, GC content and the number of ambiguous bases calculated in R. The number of genomes containing ambiguous bases (N) was `r sum(qc$N_bases > 0)`.
+
+**Licensing and ethics.** The sequences are public records from NCBI, which places no restrictions on their use. Only viral sequences are used: no human participants, personal data or live virus work are involved, so no ethical approval was needed.
+
+# Methods
+
+All analyses were done in R (`r R.version.string`) using RStudio. The code is in `code/01_data_qc_alignment.R` (data, QC, alignment, distances), `code/02_trees_spike.R` (trees and spike analysis) and `code/helpers.R` (plotting and bootstrap-support functions). This report reads the saved results of those scripts, and runs the scripts first if the results do not exist.
+
+1. **Retrieval and quality control.** Genomes were downloaded with `rentrez` (Winter, 2017) and cached so the analysis can be repeated offline. Genome length, GC content and ambiguous bases were calculated with `Biostrings` and visualised with `ggplot2` (Figure 1).
+2. **Choice of marker.** Aligning whole 30 kb genomes from three genera is slow and unreliable, because the genomes are highly divergent in places and differ in gene content. I therefore used the nucleocapsid (N) gene, which is present in every coronavirus and is a single continuous reading frame. It was extracted from each GenBank annotation by selecting the longest coding sequence whose product name contained "nucleocapsid" or "nucleoprotein".
+3. **Alignment and trimming.** N-gene sequences were aligned codon-aware with `DECIPHER::AlignTranslation` (Wright, 2016), which aligns the translated protein and maps the result back to DNA. Columns with gaps in more than 50% of sequences were removed, reducing the alignment from `r aln_cols` to `r n_sites` columns.
+4. **Distances.** Pairwise p-distances (proportion of differing sites) were calculated with `phangorn` and shown as a clustered heatmap with `pheatmap`.
+5. **Distance-based trees.** Neighbour-joining (NJ) trees (Saitou and Nei, 1987) were built from Jukes–Cantor distances. A UPGMA tree was drawn for comparison only, because it assumes a constant evolutionary rate.
+6. **Maximum-likelihood (ML) tree.** `modelTest` compared substitution models (JC, HKY and GTR, each with and without gamma-distributed rate variation and invariant sites) by AIC and BIC. The ML tree was optimised with `optim.pml` (Schliep, 2011), starting from the NJ tree.
+7. **Rooting and support.** Trees were rooted on the gammacoronavirus IBV. Branch support is the percentage of `r n_boot` bootstrap trees (Felsenstein, 1985) that contain the same split, calculated with a function in `helpers.R` and printed on nodes with at least 50% support. Nodes with at least 70% support were treated as well supported. Fifty replicates is fewer than the usual 100 or more, so support values are approximate.
+8. **Tree comparison.** Unrooted NJ and ML topologies were compared with the Robinson–Foulds distance (0 = identical).
+9. **Spike gene.** The spike coding sequence was extracted in the same way and aligned with `msa` (Clustal Omega; Bodenhofer *et al.*, 2015) for the betacoronaviruses only, because spike sequences from different genera are too divergent to align well. An NJ tree with `r n_boot` bootstraps was rooted on HCoV-OC43.
+
+# Results
+
+## Genome features
+
+```{r fig1, fig.cap="Figure 1. Genome length and GC content of the coronaviruses, coloured by genus; point shape shows the host."}
+p_qc <- plot_genome_qc(qc)
+ggsave(p("figures", "fig1_genome_qc.png"), p_qc, width = 8, height = 5, dpi = 300)
+p_qc
+```
+
+Genome length differed clearly between groups (Table 1, Figure 1). The alphacoronaviruses and the gammacoronavirus IBV had the shortest genomes (`r rng(len_other)` nt), while the betacoronaviruses ranged from `r rng(len_beta)` nt, with `r len_max$short_name` the longest (`r format(len_max$length, big.mark = ",")` nt). GC content ranged from `r round(gc_low$GC, 1)`% in `r gc_low$short_name` to `r round(gc_high$GC, 1)`% in `r gc_high$short_name`. SARS-CoV-2 and RaTG13 were almost identical in both features, consistent with their close relationship. Genome length and GC content are descriptive only and are not used in the tree building.
+
+N genes were recovered for all `r n_virus` viruses and the trimmed alignment had `r n_sites` sites.
+
+## Genetic distances
+
+```{r fig2, eval=file.exists(p("figures", "fig2_distance_heatmap.png")), fig.cap="Figure 2. Pairwise p-distance of the nucleocapsid gene, with hierarchical clustering and genus annotation."}
+include_graphics(p("figures", "fig2_distance_heatmap.png"))
+```
+
+The heatmap (Figure 2) shows four blocks of closely related viruses along the diagonal: the sarbecoviruses (p-distance `r r_sarb[1]`–`r r_sarb[2]`), the merbecoviruses (`r r_merb[1]`–`r r_merb[2]`), the embecoviruses (`r r_embe[1]`–`r r_embe[2]`) and the alphacoronaviruses (`r r_alph[1]`–`r r_alph[2]`). Distances between different lineages were much larger, `r r_betw[1]`–`r r_betw[2]` between the three betacoronavirus lineages and `r r_ab[1]`–`r r_ab[2]` between alpha- and betacoronaviruses. The gammacoronavirus IBV was about equally distant from everything else (`r r_ibv[1]`–`r r_ibv[2]`), as expected for an outgroup. The largest distance was between `r max_pair` (`r max_d`). The hierarchical clustering on the heatmap separated the same lineages.
+
+SARS-CoV-2 was closest to `r nearest` (p-distance `r d_ratg13`), followed by the two bat SARS-like viruses and SARS-CoV (`r d_sars`, about `r ratio_sars` times the distance to RaTG13). MERS-CoV was far more distant (`r d_mers`) (Table 2).
+
+```{r dist_table}
+tibble(Virus = names(d_focal)[1:6], `p-distance to SARS-CoV-2` = round(d_focal[1:6], 4)) %>%
+  kable(caption = "Table 2. The six viruses closest to SARS-CoV-2 (N gene).")
+```
+
+## Neighbour-joining tree
+
+```{r fig3, fig.width=8, fig.height=6, fig.cap="Figure 3. Neighbour-joining tree of the N gene (Jukes–Cantor distances), rooted on IBV. Numbers at nodes are bootstrap support (%), shown when at least 50%. Tip colours show the genus."}
+save_png("fig3_nj_tree.png", function()
+  plot_tree_support(p2$nj_root, p2$bs_nj, tip_col = tipcol(p2$nj_root), legend_cols = col_genus,
+                    main = paste0("Neighbour-joining tree, N gene (", n_boot, " bootstraps, JC69)")))
+```
+
+The NJ tree (Figure 3) recovered the three genera, with the betacoronaviruses (`r pc(cs(p2$nj_root, sup_nj, betas))` support) and the alphacoronaviruses (`r pc(cs(p2$nj_root, sup_nj, alph))`) each forming a single group. Within the betacoronaviruses there were three lineages: the sarbecoviruses (`r pc(cs(p2$nj_root, sup_nj, sarb))`), the merbecoviruses (`r pc(cs(p2$nj_root, sup_nj, merb))`) and the embecoviruses (`r pc(cs(p2$nj_root, sup_nj, embe))`). The sarbecoviruses and merbecoviruses were sister groups (`r pc(cs(p2$nj_root, sup_nj, c(sarb, merb)))`), with the embecoviruses outside them.
+
+SARS-CoV-2 and RaTG13 formed a pair (`r pc(cs(p2$nj_root, sup_nj, pair))`). Their closest relatives were SARS-CoV and the two bat SARS-like viruses SL-ZC45 and SL-ZXC21, which formed a second group (`r pc(cs(p2$nj_root, sup_nj, sarb_bat))`) in which the two bat viruses were sisters (`r pc(cs(p2$nj_root, sup_nj, sl_pair))`). Among the merbecoviruses, MERS-CoV was placed outside the two bat viruses HKU4 and HKU5. Among the alphacoronaviruses, HCoV-NL63 was placed outside PEDV and HCoV-229E.
+
+```{r fig4, fig.width=8, fig.height=6, fig.cap="Figure 4. UPGMA tree of the N gene, shown for comparison only (it assumes a constant evolutionary rate and has no outgroup)."}
+if (file.exists(p("figures", "fig6_upgma_tree.png"))) {
+  include_graphics(p("figures", "fig6_upgma_tree.png"))
+} else {
+  save_png("fig6_upgma_tree.png", function()
+    plot(p2$upgma_tree, main = "UPGMA tree (assumes a constant rate)"))
+}
+```
+
+The UPGMA tree (Figure 4) found the same lineages but differed from the NJ and ML trees in two ways. It placed SARS-CoV outside a group formed by SARS-CoV-2, RaTG13 and the two bat SARS-like viruses, and it split the alphacoronaviruses from all other viruses with IBV next to the betacoronaviruses. This is an artefact of the constant-rate assumption: the viruses have evolved at different speeds, and the long-branch alphacoronaviruses are pulled to the base of the tree. This is why UPGMA was not used for the main conclusions.
+
+## Maximum-likelihood tree
+
+```{r model_table}
+p2$mt %>%
+  select(Model, df, logLik, AIC, BIC) %>%
+  head(6) %>%
+  kable(digits = 1, caption = "Table 3. Best six substitution models for the N-gene alignment, ranked by BIC.")
+```
+
+The best model was `r p2$best_model` by both AIC and BIC (Table 3; AIC weight `r round(p2$mt$AICw[1], 2)`; final log-likelihood `r round(p2$logLik, 2)`). Models that allowed rate variation among sites (gamma and invariant sites) fitted far better than models that did not, which is expected for a protein-coding gene where third codon positions change much faster than the others.
+
+```{r fig5, fig.width=8, fig.height=6, fig.cap="Figure 5. Maximum-likelihood tree of the N gene (GTR+G+I), rooted on IBV, with bootstrap support (%) at nodes with at least 50%."}
+save_png("fig4_ml_tree.png", function()
+  plot_tree_support(p2$ml_root, p2$bs_ml, tip_col = tipcol(p2$ml_root), legend_cols = col_genus,
+                    main = paste0("Maximum-likelihood tree, N gene (", p2$best_model, ", ", n_boot, " bootstraps)")))
+```
+
+The ML tree (Figure 5) had the same lineages as the NJ tree. SARS-CoV-2 and RaTG13 again formed a pair (`r pc(cs(p2$ml_root, sup_ml, pair))`), the sarbecoviruses formed one group (`r pc(cs(p2$ml_root, sup_ml, sarb))`), and SARS-CoV grouped with the two bat SARS-like viruses (`r pc(cs(p2$ml_root, sup_ml, sarb_bat))`). The merbecoviruses (`r pc(cs(p2$ml_root, sup_ml, merb))`) and embecoviruses (`r pc(cs(p2$ml_root, sup_ml, embe))`) were also recovered. The NJ and ML trees differed by a Robinson–Foulds distance of `r p2$rf`, which corresponds to one rearranged branch. It lies within the alphacoronaviruses, where ML places HCoV-229E outside PEDV and HCoV-NL63 (`r pc(cs(p2$ml_root, sup_ml, c("PEDV", "HCoV-NL63")))` support for that pair), the reverse of the NJ arrangement. All other relationships were the same in both methods.
+
+## Spike gene
+
+```{r fig6, fig.width=8, fig.height=6, fig.cap="Figure 6. Neighbour-joining tree of the spike gene for the betacoronaviruses, rooted on HCoV-OC43, with bootstrap support (%) at nodes with at least 50%."}
+save_png("fig5_spike_tree.png", function()
+  plot_tree_support(p2$nj_s, p2$bs_s,
+                    main = paste0("Spike gene NJ tree (Betacoronavirus, ", n_boot, " bootstraps)")))
+```
+
+The spike sequence was recovered for `r length(p2$spike_width)` of `r n_virus` viruses (not found for `r paste(p2$spike_missing, collapse = ", ")`), so the spike tree (Figure 6) contains `r ape::Ntip(p2$nj_s)` betacoronaviruses. It agreed with the N-gene trees on the main features: SARS-CoV-2 and RaTG13 were sisters (`r pc(cs(p2$nj_s, sup_sp, pair))`), the sarbecoviruses formed one group (`r pc(cs(p2$nj_s, sup_sp, sarb))`) and the merbecoviruses another (`r pc(cs(p2$nj_s, sup_sp, merb))`). It differed in two places. First, SARS-CoV was placed outside a group made of SARS-CoV-2, RaTG13 and the two bat SARS-like viruses (`r pc(cs(p2$nj_s, sup_sp, sars2_sl))`), whereas in the N-gene trees SARS-CoV grouped with the two bat viruses. Second, HKU4 was placed outside MERS-CoV and HKU5, whereas MERS-CoV was the outer virus in the N-gene trees.
+
+# Discussion
+
+**Relationship of SARS-CoV-2 to other coronaviruses.** In all trees SARS-CoV-2 grouped with the bat virus RaTG13, inside a sarbecovirus group that also contained SARS-CoV and two bat SARS-like viruses, and well away from MERS-CoV and the common-cold coronaviruses. The N-gene distances show the same ranking: SARS-CoV-2 differed from RaTG13 at `r d_ratg13` of sites, from SARS-CoV at about `r ratio_sars` times that, and from MERS-CoV at `r d_mers`. Hypothesis 1 is therefore supported, and the result agrees with the proposed bat origin of the lineage (Zhou *et al.*, 2020; Andersen *et al.*, 2020). Bootstrap support for the SARS-CoV-2–RaTG13 pair was `r pc(cs(p2$nj_root, sup_nj, pair))` in the NJ tree, `r pc(cs(p2$ml_root, sup_ml, pair))` in the ML tree and `r pc(cs(p2$nj_s, sup_sp, pair))` in the spike tree.
+
+**Agreement between genes and methods.** Hypothesis 2 is partly supported. The N-gene and spike trees agree on the major lineages (sarbecoviruses, merbecoviruses, embecoviruses) and on the SARS-CoV-2–RaTG13 pair, but disagree on the position of SARS-CoV and the order of the merbecoviruses. One possible explanation is recombination, which is common among sarbecoviruses (Boni *et al.*, 2020) and can give different genes different histories. Another is that spike is under different selection from N because it binds host receptors. These explanations are untested here, and the differences may also reflect limited signal: each tree rests on one gene of about 1.2 kb (N) or 3.5–4 kb (spike), with only `r n_boot` bootstraps. The NJ and ML trees were nearly identical (Robinson–Foulds distance `r p2$rf`), so the N-gene result does not depend much on the method, whereas the UPGMA tree showed why a constant-rate method is unsuitable for these data.
+
+**Real-world implications.** Placing a newly found coronavirus on a tree of known viruses, as done here with a single conserved gene, is a fast first step in an outbreak. It shows which known viruses to compare with, which animal groups to sample, and whether findings about relatives (for example on drug targets) may carry over. The close link between SARS-CoV-2 and bat sarbecoviruses supports continued surveillance of coronaviruses in bats and other wildlife.
+
+**Limitations.**
+
+- Only `r n_virus` viruses were sampled. Closer relatives of SARS-CoV-2 than RaTG13 have since been described (Temmam *et al.*, 2022), and no intermediate hosts are included, so the trees say nothing about how the virus reached humans.
+- One gene gives one view of the evolutionary history, and recombination can hide in a single tree. A whole-genome or multi-gene analysis would be stronger.
+- Between different lineages the N-gene p-distances were close to 0.5, which suggests that many sites have changed more than once. Deep relationships between genera are therefore poorly resolved, and only the groupings within lineages should be considered reliable.
+- Fifty bootstrap replicates are fewer than usual, so support values are approximate.
+- The spike gene could not be extracted for MHV, and spike sequences from different genera were not aligned.
+- NJ trees used the simple Jukes–Cantor model, and the ML analysis was started from one tree.
+
+# Conclusion and future work
+
+This project placed SARS-CoV-2 on a tree of `r n_virus` coronaviruses using R. In every tree SARS-CoV-2 was sister to the bat virus RaTG13, within a sarbecovirus group, and far from MERS-CoV and the common-cold coronaviruses. Neighbour-joining and maximum-likelihood trees of the N gene differed only in the order of three alphacoronaviruses, while the spike tree placed SARS-CoV and the merbecoviruses differently, which shows that different genes can tell slightly different stories. These results fit a bat-virus origin of the SARS-CoV-2 lineage, but they cannot show the route to humans. Future work should add more sarbecoviruses (including newer bat viruses and viruses from pangolins and civets), analyse several genes or whole genomes, test for recombination, use more bootstrap replicates, and apply dated Bayesian methods to estimate when the lineages split.
+
+# Reproducibility
+
+```{r repro_text, echo=FALSE, results="asis"}
+cat("1. Install the packages: `tidyverse`, `rentrez`, `ape`, `phangorn`, `pheatmap`, `ggrepel`, `rmarkdown` (CRAN) and `Biostrings`, `msa`, `DECIPHER` (Bioconductor).\n",
+    "2. Run `code/01_data_qc_alignment.R`, then `code/02_trees_spike.R`, from the repository root.\n",
+    "3. Render this report: `rmarkdown::render(\"code/coronavirus_report.Rmd\", output_dir = \"results\")`.\n",
+    "4. Random seed: 123. Bootstrap replicates: ", n_boot, ".\n", sep = "")
+```
+
+```{r session}
+sessionInfo()
+```
+
+# References
+
+Andersen, K.G., Rambaut, A., Lipkin, W.I., Holmes, E.C. and Garry, R.F. (2020) 'The proximal origin of SARS-CoV-2', *Nature Medicine*, 26, pp. 450–452.
+
+Bodenhofer, U., Bonatesta, E., Horejš-Kainrath, C. and Hochreiter, S. (2015) 'msa: an R package for multiple sequence alignment', *Bioinformatics*, 31(24), pp. 3997–3999.
+
+Boni, M.F. *et al.* (2020) 'Evolutionary origins of the SARS-CoV-2 sarbecovirus lineage responsible for the COVID-19 pandemic', *Nature Microbiology*, 5, pp. 1408–1417.
+
+Felsenstein, J. (1985) 'Confidence limits on phylogenies: an approach using the bootstrap', *Evolution*, 39(4), pp. 783–791.
+
+Kolde, R. *pheatmap: Pretty Heatmaps*. R package.
+
+Pagès, H., Aboyoun, P., Gentleman, R. and DebRoy, S. *Biostrings: Efficient manipulation of biological strings*. R package.
+
+Paradis, E. and Schliep, K. (2019) 'ape 5.0: an environment for modern phylogenetics and evolutionary analyses in R', *Bioinformatics*, 35(3), pp. 526–528.
+
+Saitou, N. and Nei, M. (1987) 'The neighbor-joining method: a new method for reconstructing phylogenetic trees', *Molecular Biology and Evolution*, 4(4), pp. 406–425.
+
+Schliep, K.P. (2011) 'phangorn: phylogenetic analysis in R', *Bioinformatics*, 27(4), pp. 592–593.
+
+Temmam, S. *et al.* (2022) 'Bat coronaviruses related to SARS-CoV-2 and infectious for human cells', *Nature*, 604, pp. 330–336.
+
+Wickham, H. *et al.* (2019) 'Welcome to the tidyverse', *Journal of Open Source Software*, 4(43), 1686.
+
+Winter, D.J. (2017) 'rentrez: an R package for the NCBI eUtils API', *The R Journal*, 9(2), pp. 520–526.
+
+Wright, E.S. (2016) 'Using DECIPHER v2.0 to analyze big biological sequence data in R', *The R Journal*, 8(1), pp. 352–359.
+
+Zhou, P. *et al.* (2020) 'A pneumonia outbreak associated with a new coronavirus of probable bat origin', *Nature*, 579, pp. 270–273.
+
+NCBI Nucleotide database (https://www.ncbi.nlm.nih.gov/nuccore/), accessed 14 November 2026. Sequences are cited by accession in Table 1.
